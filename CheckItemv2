@@ -1,6 +1,5 @@
--- BF Quick Account Check v13 (autoexec-ready)
+-- BF Quick Account Check v14 (autoexec + fix bug melee)
 task.spawn(function()
-    -- Wait game load
     if not game:IsLoaded() then game.Loaded:Wait() end
     
     local plr = game:GetService("Players").LocalPlayer
@@ -12,7 +11,7 @@ task.spawn(function()
     local CommF = game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("CommF_")
     local CoreGui = game:GetService("CoreGui")
     
-    -- ===== AUTO TEAM (check plr.Team) =====
+    -- ===== AUTO TEAM =====
     local TEAM = "Pirates"  -- "Marines"
     if plr.Team == nil then
         print("[BF] Spam SetTeam...")
@@ -31,7 +30,6 @@ task.spawn(function()
         task.wait(3)
     end
     
-    -- Đợi inventory + data load
     task.wait(10)
     plr:WaitForChild("Backpack", 10)
     plr:WaitForChild("Data", 10)
@@ -56,13 +54,6 @@ task.spawn(function()
     local PREREQS = {"Black Leg", "Electro", "Fishman Karate", "Dragon Claw",
                      "Superhuman", "Death Step", "Sharkman Karate",
                      "Electric Claw", "Dragon Talon"}
-    local PREREQ_REMOTE = {
-        ["Black Leg"]="BuyBlackLeg", ["Electro"]="BuyElectro",
-        ["Fishman Karate"]="BuyFishmanKarate", ["Dragon Claw"]="BuyDragonClaw",
-        ["Superhuman"]="BuySuperhuman", ["Death Step"]="BuyDeathStep",
-        ["Sharkman Karate"]="BuySharkmanKarate", ["Electric Claw"]="BuyElectricClaw",
-        ["Dragon Talon"]="BuyDragonTalon",
-    }
     local TOTAL_MELEES = 12
     local SWORD_ABBR = {
         ["Cursed Dual Katana"] = "cdk",
@@ -179,20 +170,17 @@ task.spawn(function()
     if ls and ls:FindFirstChild("Bounty/Honor") then bounty = ls["Bounty/Honor"].Value
     elseif ls and ls:FindFirstChild("Bounty") then bounty = ls.Bounty.Value end
 
-    -- ===== MELEE =====
-    local function isOwned(remoteName)
-        local ok, ret = pcall(function() return CommF:InvokeServer(remoteName, true) end)
-        if not ok then return false end
-        return ret ~= nil and type(ret) ~= "string"
-    end
-
+    -- ===== MELEE (Tool detection only, không probe remote) =====
     local meleeData = {}
     for _, p in ipairs({plr.Backpack, char}) do
         if p then
             for _, t in pairs(p:GetChildren()) do
                 if t:IsA("Tool") and t.ToolTip == "Melee" then
                     local l = t:FindFirstChild("Level")
-                    meleeData[t.Name] = {mastery = l and l.Value or 0, equipped = (p == char)}
+                    meleeData[t.Name] = {
+                        mastery = l and l.Value or 0,
+                        equipped = (p == char)
+                    }
                 end
             end
         end
@@ -203,28 +191,21 @@ task.spawn(function()
     local function addMelee(name)
         local md = meleeData[name]
         table.insert(ownedMelee, {
-            name = name, mastery = md and md.mastery or nil,
+            name = name,
+            mastery = md and md.mastery or nil,
             equipped = md and md.equipped or false,
         })
     end
 
     addMelee("Combat")
-    local hasGodhuman = isOwned("BuyGodhuman")
-    if hasGodhuman then
-        for _, m in ipairs(PREREQS) do addMelee(m) end
-        addMelee("Godhuman")
-    else
-        for _, m in ipairs(PREREQS) do
-            if isOwned(PREREQ_REMOTE[m]) then addMelee(m)
-            else table.insert(missingMelees, m) end
-        end
-        table.insert(missingMelees, "Godhuman")
+    for _, m in ipairs(PREREQS) do
+        if meleeData[m] then addMelee(m)
+        else table.insert(missingMelees, m) end
     end
-    if isOwned("BuySanguineArt") or meleeData["Sanguine Art"] then
-        addMelee("Sanguine Art")
-    else
-        table.insert(missingMelees, "Sanguine Art")
-    end
+    if meleeData["Godhuman"] then addMelee("Godhuman")
+    else table.insert(missingMelees, "Godhuman") end
+    if meleeData["Sanguine Art"] then addMelee("Sanguine Art")
+    else table.insert(missingMelees, "Sanguine Art") end
 
     table.sort(ownedMelee, function(a, b)
         if a.equipped ~= b.equipped then return a.equipped end
@@ -312,12 +293,12 @@ task.spawn(function()
             if v4Sub then raceStr = raceStr .. " T" .. tostring(v4Sub) end
             table.insert(parts, raceStr)
         end
-        local hasT, hasK, hasD, mc = false, false, false, 0
+        local hasT, hasK, hasDo, mc = false, false, false, 0
         for name in pairs(ownedFruits) do
             if name == currentFruit:lower() then
             elseif name:find("tiger") or name:find("leopard") then hasT = true
             elseif name:find("kitsune") then hasK = true
-            elseif name:find("dough") or name:find("mochi") then hasD = true
+            elseif name:find("dough") or name:find("mochi") then hasDo = true
             else
                 local isMythic = false
                 for _, group in ipairs(MYTHIC_GROUPS) do
@@ -332,7 +313,7 @@ task.spawn(function()
         local fruitsList = {}
         if hasT then table.insert(fruitsList, "tiger") end
         if hasK then table.insert(fruitsList, "kit") end
-        if hasD then table.insert(fruitsList, "dough") end
+        if hasDo then table.insert(fruitsList, "dough") end
         if mc > 0 then table.insert(fruitsList, mc .. "mithic") end
         if #fruitsList > 0 then
             table.insert(parts, table.concat(fruitsList, "+"))
@@ -441,5 +422,5 @@ task.spawn(function()
         if setclipboard then setclipboard(completedText); flash(copyBtn, "✓") else flash(copyBtn, "✗") end
     end)
 
-    print("[BF Check v13] OK")
+    print("[BF Check v14] OK")
 end)

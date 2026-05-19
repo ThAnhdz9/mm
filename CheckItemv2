@@ -1,0 +1,440 @@
+-- BF Quick Account Check v10
+local plr = game.Players.LocalPlayer
+local CommF = game:GetService("ReplicatedStorage").Remotes.CommF_
+local CoreGui = game:GetService("CoreGui")
+if CoreGui:FindFirstChild("BFCheck") then CoreGui.BFCheck:Destroy() end
+
+-- ===== TARGET LIST =====
+local TARGET_FRUITS = {
+    {"Dragon", "dragon"}, {"Kitsune", "kitsune"}, {"Tiger", "tiger"},
+    {"Spirit", "spirit"}, {"Control", "control"}, {"Venom", "venom"},
+    {"Shadow", "shadow"}, {"Dough", "dough"}, {"T-Rex", "t-rex"},
+    {"Mammoth", "mammoth"}, {"Gravity", "gravity"},
+}
+local TARGET_SWORDS = {"Shark Anchor", "Cursed Dual Katana"}
+local TARGET_GUNS   = {"Skull Guitar"}
+local TARGET_ITEMS  = {{"Mirror Fractal", "Mirror Fractal"}, {"Mảnh mũ Valkyrie", "Valkyrie"}}
+
+local MYTHIC_GROUPS = {
+    {"dragon"}, {"kitsune"}, {"tiger","leopard"}, {"spirit","soul"},
+    {"control"}, {"venom"}, {"shadow"}, {"dough","mochi"},
+    {"t-rex"}, {"mammoth"}, {"gravity"}, {"portal"}, {"yeti"},
+}
+
+local PREREQS = {"Black Leg", "Electro", "Fishman Karate", "Dragon Claw",
+                 "Superhuman", "Death Step", "Sharkman Karate",
+                 "Electric Claw", "Dragon Talon"}
+local PREREQ_REMOTE = {
+    ["Black Leg"]="BuyBlackLeg", ["Electro"]="BuyElectro",
+    ["Fishman Karate"]="BuyFishmanKarate", ["Dragon Claw"]="BuyDragonClaw",
+    ["Superhuman"]="BuySuperhuman", ["Death Step"]="BuyDeathStep",
+    ["Sharkman Karate"]="BuySharkmanKarate", ["Electric Claw"]="BuyElectricClaw",
+    ["Dragon Talon"]="BuyDragonTalon",
+}
+local TOTAL_MELEES = 12
+local SWORD_ABBR = {
+    ["Cursed Dual Katana"] = "cdk",
+    ["Shark Anchor"] = "sa",
+}
+
+-- ===== FETCH =====
+local inv = CommF:InvokeServer("getInventory") or {}
+local fruitsBox = CommF:InvokeServer("getInventoryFruits") or {}
+local D = plr:FindFirstChild("Data")
+local char = plr.Character
+
+local ownedFruits = {}
+local currentFruit = (D and D:FindFirstChild("DevilFruit")) and D.DevilFruit.Value or ""
+if currentFruit ~= "" then ownedFruits[currentFruit:lower()] = true end
+for _, f in pairs(fruitsBox) do
+    if type(f) == "table" and f.Name then ownedFruits[f.Name:lower()] = true end
+end
+for _, item in pairs(inv) do
+    if type(item) == "table" and item.Type == "Blox Fruit" and item.Name then
+        ownedFruits[item.Name:lower()] = true
+    end
+end
+for _, p in ipairs({plr.Backpack, char}) do
+    if p then
+        for _, t in pairs(p:GetChildren()) do
+            if t:IsA("Tool") and (t.ToolTip == "Blox Fruit" or t:FindFirstChild("EatRemote")) then
+                ownedFruits[t.Name:lower()] = true
+                local on = t:GetAttribute("OriginalName")
+                if on then ownedFruits[on:lower()] = true end
+            end
+        end
+    end
+end
+
+local function hasFruit(key)
+    local k = key:lower()
+    for owned in pairs(ownedFruits) do
+        if owned:find(k, 1, true) then return true end
+    end
+    return false
+end
+
+local function hasInvItem(target)
+    local k = target:lower()
+    for _, item in pairs(inv) do
+        if type(item) == "table" and item.Name and item.Name:lower():find(k, 1, true) then
+            return true
+        end
+    end
+    return false
+end
+
+local function countMythics()
+    local cnt = 0
+    for _, group in ipairs(MYTHIC_GROUPS) do
+        for _, k in ipairs(group) do
+            if hasFruit(k) then cnt = cnt + 1; break end
+        end
+    end
+    return cnt
+end
+local mythicCount = countMythics()
+
+local function getMochiTier()
+    local doughTool
+    for _, p in ipairs({plr.Backpack, char}) do
+        if p then
+            for _, t in pairs(p:GetChildren()) do
+                if t:IsA("Tool") and (t.Name:lower():find("dough") or t.Name:lower():find("mochi")) then
+                    doughTool = t; break
+                end
+            end
+        end
+    end
+    if not doughTool then return "v1" end
+    local aw = doughTool:FindFirstChild("AwakenedMoves")
+    if not aw then return "v1" end
+    local cnt = 0
+    for _, k in ipairs({"Z","X","C","V","F"}) do
+        if aw:FindFirstChild(k) then cnt = cnt + 1 end
+    end
+    return cnt >= 5 and "v2" or "v1"
+end
+
+local function getDfLabel()
+    if currentFruit == "" then
+        return mythicCount > 0 and (mythicCount .. " mithic") or "không ăn"
+    end
+    local cf = currentFruit:lower()
+    if cf:find("dough") or cf:find("mochi") then return "mochi " .. getMochiTier()
+    elseif cf:find("kitsune") then return "df kit"
+    elseif cf:find("tiger") or cf:find("leopard") then return "df tiger"
+    else return mythicCount .. " mithic" end
+end
+
+local tier = "V1"
+local v4Sub = nil
+if char and char:FindFirstChild("RaceTransformed") then
+    tier = "V4"
+    if D and D:FindFirstChild("Race") and D.Race:FindFirstChild("C") then
+        v4Sub = D.Race.C.Value
+    end
+else
+    local ok3, r3 = pcall(function() return CommF:InvokeServer("Wenlocktoad", "1") end)
+    local ok2, r2 = pcall(function() return CommF:InvokeServer("Alchemist", "1") end)
+    if ok3 and r3 == -2 then tier = "V3"
+    elseif ok2 and r2 == -2 then tier = "V2" end
+end
+
+local race = (D and D:FindFirstChild("Race")) and D.Race.Value or "?"
+local lvl  = (D and D:FindFirstChild("Level")) and D.Level.Value or "?"
+local beli = (D and D:FindFirstChild("Beli")) and D.Beli.Value or "?"
+local frag = (D and D:FindFirstChild("Fragments")) and D.Fragments.Value or "?"
+
+local bounty = "?"
+local ls = plr:FindFirstChild("leaderstats")
+if ls and ls:FindFirstChild("Bounty/Honor") then
+    bounty = ls["Bounty/Honor"].Value
+elseif ls and ls:FindFirstChild("Bounty") then
+    bounty = ls.Bounty.Value
+end
+
+-- ===== MELEE =====
+local function isOwned(remoteName)
+    local ok, ret = pcall(function() return CommF:InvokeServer(remoteName, true) end)
+    if not ok then return false end
+    return ret ~= nil and type(ret) ~= "string"
+end
+
+local meleeData = {}
+for _, p in ipairs({plr.Backpack, char}) do
+    if p then
+        for _, t in pairs(p:GetChildren()) do
+            if t:IsA("Tool") and t.ToolTip == "Melee" then
+                local l = t:FindFirstChild("Level")
+                meleeData[t.Name] = {mastery = l and l.Value or 0, equipped = (p == char)}
+            end
+        end
+    end
+end
+
+local ownedMelee = {}
+local missingMelees = {}
+local function addMelee(name)
+    local md = meleeData[name]
+    table.insert(ownedMelee, {
+        name = name,
+        mastery = md and md.mastery or nil,
+        equipped = md and md.equipped or false,
+    })
+end
+
+addMelee("Combat")
+local hasGodhuman = isOwned("BuyGodhuman")
+if hasGodhuman then
+    for _, m in ipairs(PREREQS) do addMelee(m) end
+    addMelee("Godhuman")
+else
+    for _, m in ipairs(PREREQS) do
+        if isOwned(PREREQ_REMOTE[m]) then addMelee(m)
+        else table.insert(missingMelees, m) end
+    end
+    table.insert(missingMelees, "Godhuman")
+end
+if isOwned("BuySanguineArt") or meleeData["Sanguine Art"] then
+    addMelee("Sanguine Art")
+else
+    table.insert(missingMelees, "Sanguine Art")
+end
+
+table.sort(ownedMelee, function(a, b)
+    if a.equipped ~= b.equipped then return a.equipped end
+    local am = type(a.mastery) == "number" and a.mastery or -1
+    local bm = type(b.mastery) == "number" and b.mastery or -1
+    return am > bm
+end)
+
+-- ===== GUI OUTPUT =====
+local lines = {}
+local function add(t) table.insert(lines, t) end
+
+add("═══════════════════════════════")
+add("    BLOX FRUIT ACCOUNT CHECK")
+add("═══════════════════════════════")
+add("DF        : " .. getDfLabel())
+local raceLine = race .. " " .. tier
+if v4Sub then raceLine = raceLine .. " (T" .. tostring(v4Sub) .. ")" end
+add("Race      : " .. raceLine)
+add(string.format("Cấp/Beli  : %s / %s", tostring(lvl), tostring(beli)))
+add("Fragments : " .. tostring(frag))
+add("Bounty    : " .. tostring(bounty))
+add("")
+add("▸ MELEE ĐÃ HỌC (" .. #ownedMelee .. "/" .. TOTAL_MELEES .. ")")
+for _, m in ipairs(ownedMelee) do
+    local masteryStr = type(m.mastery) == "number" and (m.mastery .. "/600") or "?/600"
+    local mark = (type(m.mastery) == "number" and m.mastery >= 600) and "✓" or "•"
+    local eq = m.equipped and " ⚡" or ""
+    add(string.format("  %s %s — %s%s", mark, m.name, masteryStr, eq))
+end
+if #missingMelees > 0 then
+    add("")
+    add("▸ MELEE CHƯA HỌC (" .. #missingMelees .. ")")
+    for _, m in ipairs(missingMelees) do add("  ✗ " .. m) end
+end
+add("")
+add("▸ FRUITS")
+for _, fdef in ipairs(TARGET_FRUITS) do
+    add(string.format("  [%s] %s", hasFruit(fdef[2]) and "✓" or " ", fdef[1]))
+end
+add("")
+add("▸ KIẾM")
+for _, w in ipairs(TARGET_SWORDS) do
+    add(string.format("  [%s] %s", hasInvItem(w) and "✓" or " ", w))
+end
+add("")
+add("▸ SÚNG")
+for _, w in ipairs(TARGET_GUNS) do
+    add(string.format("  [%s] %s", hasInvItem(w) and "✓" or " ", w))
+end
+add("")
+add("▸ ĐỒ")
+for _, idef in ipairs(TARGET_ITEMS) do
+    add(string.format("  [%s] %s", hasInvItem(idef[2]) and "✓" or " ", idef[1]))
+end
+
+local output = table.concat(lines, "\n")
+
+-- ===== WORKSPACE FILE =====
+local function buildCompleted()
+    local parts = {"Completed-LV" .. tostring(lvl)}
+
+    local hasGod, hasSang = false, false
+    for _, m in ipairs(ownedMelee) do
+        if m.name == "Godhuman" then hasGod = true end
+        if m.name == "Sanguine Art" then hasSang = true end
+    end
+    if hasGod and hasSang then table.insert(parts, "godmelenew")
+    elseif hasGod then table.insert(parts, "god")
+    elseif hasSang then table.insert(parts, "san") end
+
+    local swords = {}
+    for orig, abbr in pairs(SWORD_ABBR) do
+        if hasInvItem(orig) then table.insert(swords, abbr) end
+    end
+    if #swords > 0 then table.insert(parts, table.concat(swords, " ")) end
+
+    if hasInvItem("Skull Guitar") then table.insert(parts, "sgt") end
+
+    local hasMF = hasInvItem("Mirror Fractal")
+    local hasVK = hasInvItem("Valkyrie")
+    if hasMF and hasVK then table.insert(parts, "mm")
+    elseif hasMF then table.insert(parts, "mf")
+    elseif hasVK then table.insert(parts, "vk") end
+
+    -- DF đang ăn
+    if currentFruit ~= "" then
+        local cf = currentFruit:lower()
+        local label
+        if cf:find("dough") or cf:find("mochi") then label = "Mc" .. getMochiTier()
+        elseif cf:find("tiger") or cf:find("leopard") then label = "tiger"
+        elseif cf:find("kitsune") then label = "kit"
+        else label = "mithic" end
+        table.insert(parts, label)
+    end
+
+    -- Race: CHỈ ghi khi V4
+    if tier == "V4" then
+        local raceStr = race .. " V4"
+        if v4Sub then raceStr = raceStr .. " T" .. tostring(v4Sub) end
+        table.insert(parts, raceStr)
+    end
+
+    -- FRUITS
+    local hasT, hasK, hasD, mc = false, false, false, 0
+    for name in pairs(ownedFruits) do
+        if name == currentFruit:lower() then
+            -- skip fruit đang ăn
+        elseif name:find("tiger") or name:find("leopard") then hasT = true
+        elseif name:find("kitsune") then hasK = true
+        elseif name:find("dough") or name:find("mochi") then hasD = true
+        else
+            local isMythic = false
+            for _, group in ipairs(MYTHIC_GROUPS) do
+                for _, k in ipairs(group) do
+                    if name:find(k) then isMythic = true; break end
+                end
+                if isMythic then break end
+            end
+            if isMythic then mc = mc + 1 end
+        end
+    end
+
+    local fruitsList = {}
+    if hasT then table.insert(fruitsList, "tiger") end
+    if hasK then table.insert(fruitsList, "kit") end
+    if hasD then table.insert(fruitsList, "dough") end
+    if mc > 0 then table.insert(fruitsList, mc .. "mithic") end
+    if #fruitsList > 0 then
+        table.insert(parts, table.concat(fruitsList, "+"))
+    end
+
+    return table.concat(parts, ",")
+end
+
+local completedText = buildCompleted()
+print(output)
+print("\n[Workspace] " .. completedText)
+if writefile then
+    pcall(function() writefile(plr.Name .. ".txt", completedText) end)
+end
+
+-- ===== GUI =====
+local gui = Instance.new("ScreenGui")
+gui.Name = "BFCheck"
+gui.ResetOnSpawn = false
+gui.DisplayOrder = 999
+gui.IgnoreGuiInset = true
+gui.Parent = CoreGui
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 360, 0, 500)
+frame.Position = UDim2.new(0.5, -180, 0, 10)
+frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+frame.BackgroundTransparency = 0.3
+frame.BorderSizePixel = 0
+frame.Active = true
+frame.Draggable = true
+frame.Parent = gui
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 10)
+
+local bar = Instance.new("Frame", frame)
+bar.Size = UDim2.new(1, 0, 0, 32)
+bar.BackgroundTransparency = 1
+bar.BorderSizePixel = 0
+
+local title = Instance.new("TextLabel", bar)
+title.Size = UDim2.new(1, -100, 1, 0)
+title.Position = UDim2.new(0, 10, 0, 0)
+title.BackgroundTransparency = 1
+title.Text = "🏴‍☠️ Account Check"
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 13
+title.TextXAlignment = Enum.TextXAlignment.Left
+
+local copyBtn = Instance.new("TextButton", bar)
+copyBtn.Size = UDim2.new(0, 46, 0, 22)
+copyBtn.Position = UDim2.new(1, -78, 0, 5)
+copyBtn.BackgroundColor3 = Color3.fromRGB(60, 110, 200)
+copyBtn.BackgroundTransparency = 0.2
+copyBtn.Text = "Copy"
+copyBtn.TextColor3 = Color3.fromRGB(255,255,255)
+copyBtn.Font = Enum.Font.GothamBold
+copyBtn.TextSize = 11
+copyBtn.BorderSizePixel = 0
+Instance.new("UICorner", copyBtn).CornerRadius = UDim.new(0, 6)
+
+local closeBtn = Instance.new("TextButton", bar)
+closeBtn.Size = UDim2.new(0, 22, 0, 22)
+closeBtn.Position = UDim2.new(1, -28, 0, 5)
+closeBtn.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
+closeBtn.BackgroundTransparency = 0.2
+closeBtn.Text = "×"
+closeBtn.TextColor3 = Color3.fromRGB(255,255,255)
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextSize = 14
+closeBtn.BorderSizePixel = 0
+Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 6)
+closeBtn.MouseButton1Click:Connect(function() gui:Destroy() end)
+
+local scroll = Instance.new("ScrollingFrame", frame)
+scroll.Size = UDim2.new(1, -14, 1, -38)
+scroll.Position = UDim2.new(0, 7, 0, 34)
+scroll.BackgroundTransparency = 1
+scroll.BorderSizePixel = 0
+scroll.ScrollBarThickness = 3
+scroll.ScrollBarImageColor3 = Color3.fromRGB(150, 150, 150)
+scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+scroll.CanvasSize = UDim2.new(0,0,0,0)
+local pad = Instance.new("UIPadding", scroll)
+pad.PaddingLeft = UDim.new(0, 6)
+pad.PaddingRight = UDim.new(0, 6)
+pad.PaddingTop = UDim.new(0, 2)
+pad.PaddingBottom = UDim.new(0, 8)
+
+local txt = Instance.new("TextLabel", scroll)
+txt.Size = UDim2.new(1, -8, 0, 0)
+txt.BackgroundTransparency = 1
+txt.Text = output .. "\n\n[FILE]\n" .. completedText
+txt.TextColor3 = Color3.fromRGB(240, 240, 240)
+txt.Font = Enum.Font.Code
+txt.TextSize = 12
+txt.TextXAlignment = Enum.TextXAlignment.Left
+txt.TextYAlignment = Enum.TextYAlignment.Top
+txt.AutomaticSize = Enum.AutomaticSize.Y
+txt.TextWrapped = false
+
+local function flash(btn, t2)
+    local old = btn.Text
+    btn.Text = t2; task.wait(1.2); btn.Text = old
+end
+copyBtn.MouseButton1Click:Connect(function()
+    if setclipboard then setclipboard(completedText); flash(copyBtn, "✓") else flash(copyBtn, "✗") end
+end)
+
+print("[BF Check v10] OK")
